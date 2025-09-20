@@ -15,7 +15,6 @@ public class SpotifySearch {
                 .header("Authorization", "Bearer " + token)
                 .GET()
                 .build();
-
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
         JSONObject json = new JSONObject(response.body());
         return json.getJSONObject("tracks").getJSONArray("items");
