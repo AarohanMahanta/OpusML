@@ -94,5 +94,90 @@ public class OpusMLServiceImpl extends opusml.OpusMLServiceGrpc.OpusMLServiceImp
     @Override
     public void analyzeTrack(Spotify.AnalyzeRequest request,
                              StreamObserver<Spotify.AnalyzeResponse> responseObserver) {
+        try {
+            // 1. Get OAuth token
+            String accessToken = SpotifyAuth.getAccessToken();
+
+            // 2. Fetch audio features from Spotify API
+            String url = String.format(
+                    "https://api.spotify.com/v1/audio-features/%s",
+                    request.getTrackId()
+            );
+
+            HttpRequest httpRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Authorization", "Bearer " + accessToken)
+                    .GET()
+                    .build();
+
+            HttpResponse<String> httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+
+            if (httpResponse.statusCode() != 200) {
+                logger.error("Spotify API error fetching audio features: status={}, body={}", httpResponse.statusCode(), httpResponse.body());
+                responseObserver.onError(Status.UNAVAILABLE
+                        .withDescription("Spotify API returned status: " + httpResponse.statusCode())
+                        .asRuntimeException());
+                return;
+            }
+
+            JSONObject featuresJson = new JSONObject(httpResponse.body());
+
+            // 3. Extract features for ML
+            double tempo = featuresJson.optDouble("tempo", 0);
+            double energy = featuresJson.optDouble("energy", 0);
+            double valence = featuresJson.optDouble("valence", 0);
+            double acousticness = featuresJson.optDouble("acousticness", 0);
+            double instrumentalness = featuresJson.optDouble("instrumentalness", 0);
+            double danceability = featuresJson.optDouble("danceability", 0);
+
+            // 4. Predict mood using ML (stub for now)
+            String predictedMood = "Calm"; // Replace with Weka model prediction
+            float confidence = 0.85f;      // Replace with model confidence
+
+            // 5. Optionally, fetch recommendations from Spotify
+            // Example: using features for seed_tracks or target_* params
+            // We'll stub 3 dummy recommendations for now
+            Spotify.RecommendedTrack rec1 = Spotify.RecommendedTrack.newBuilder()
+                    .setName("Dummy Track 1")
+                    .setArtist("Dummy Artist 1")
+                    .setUri("spotify:track:dummy1")
+                    .build();
+            Spotify.RecommendedTrack rec2 = Spotify.RecommendedTrack.newBuilder()
+                    .setName("Dummy Track 2")
+                    .setArtist("Dummy Artist 2")
+                    .setUri("spotify:track:dummy2")
+                    .build();
+            Spotify.RecommendedTrack rec3 = Spotify.RecommendedTrack.newBuilder()
+                    .setName("Dummy Track 3")
+                    .setArtist("Dummy Artist 3")
+                    .setUri("spotify:track:dummy3")
+                    .build();
+
+            // 6. Build response
+            Spotify.AnalyzeResponse response = Spotify.AnalyzeResponse.newBuilder()
+                    .setPredictedMood(predictedMood)
+                    .setConfidence(confidence)
+                    .addRecommendations(rec1)
+                    .addRecommendations(rec2)
+                    .addRecommendations(rec3)
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+
+        } catch (IOException | InterruptedException e) {
+            logger.error("Spotify API request failed", e);
+            responseObserver.onError(Status.UNAVAILABLE
+                    .withDescription("Spotify API unavailable")
+                    .withCause(e)
+                    .asRuntimeException());
+        } catch (Exception e) {
+            logger.error("Unexpected error in analyzeTrack", e);
+            responseObserver.onError(Status.INTERNAL
+                    .withDescription("Unexpected error in analyzeTrack")
+                    .withCause(e)
+                    .asRuntimeException());
+        }
     }
+
 }
