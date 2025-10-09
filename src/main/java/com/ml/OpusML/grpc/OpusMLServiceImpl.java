@@ -1,5 +1,11 @@
 package com.ml.OpusML.grpc;
 
+import weka.classifiers.Classifier;
+import weka.core.Attribute;
+import weka.core.DenseInstance;
+import weka.core.Instances;
+
+
 import com.ml.OpusML.spotify.SpotifyAuth;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
@@ -10,6 +16,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.ArrayList;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -20,6 +27,20 @@ public class OpusMLServiceImpl extends opusml.OpusMLServiceGrpc.OpusMLServiceImp
 
     private static final Logger logger = LoggerFactory.getLogger(OpusMLServiceImpl.class);
     private final HttpClient httpClient = HttpClient.newHttpClient();
+
+    private final Classifier moodModel;
+
+    public OpusMLServiceImpl() {
+        Classifier loadedModel;
+        try {
+            loadedModel = (Classifier) weka.core.SerializationHelper.read("models/mood_model.model");
+            logger.info("Loaded Weka model successfully.");
+        } catch (Exception e) {
+            logger.error("Failed to load Weka model.", e);
+            loadedModel = null;
+        }
+        this.moodModel = loadedModel;
+    }
 
     @Override
     public void searchTracks(Spotify.SearchRequest request,
@@ -122,17 +143,62 @@ public class OpusMLServiceImpl extends opusml.OpusMLServiceGrpc.OpusMLServiceImp
 
             JSONObject featuresJson = new JSONObject(httpResponse.body());
 
-            // 3. Extract features for ML
+            //Extract features for ML
             double tempo = featuresJson.optDouble("tempo", 0);
             double energy = featuresJson.optDouble("energy", 0);
             double valence = featuresJson.optDouble("valence", 0);
             double acousticness = featuresJson.optDouble("acousticness", 0);
             double instrumentalness = featuresJson.optDouble("instrumentalness", 0);
-            double danceability = featuresJson.optDouble("danceability", 0);
 
-            // 4. Predict mood using ML (stub for now)
-            String predictedMood = "Calm"; // Replace with Weka model prediction
-            float confidence = 0.85f;      // Replace with model confidence
+            String predictedMood = "Unknown";
+            float confidence = 0.0f;
+
+            if (moodModel != null) {
+                try {
+                    // Define attributes in the same order used during training
+                    ArrayList<Attribute> attributes = new ArrayList<>();
+                    attributes.add(new Attribute("tempo"));
+                    attributes.add(new Attribute("energy"));
+                    attributes.add(new Attribute("valence"));
+                    attributes.add(new Attribute("acousticness"));
+                    attributes.add(new Attribute("instrumentalness"));
+
+                    // Define class attribute (moods)
+                    ArrayList<String> classValues = new ArrayList<>();
+                    classValues.add("Calm");
+                    classValues.add("Happy");
+                    classValues.add("Sad");
+                    classValues.add("Energetic");
+                    Attribute classAttr = new Attribute("mood", classValues);
+                    attributes.add(classAttr);
+
+                    // Build dataset
+                    Instances dataset = new Instances("TestInstance", attributes, 1);
+                    dataset.setClassIndex(dataset.numAttributes() - 1);
+
+                    // Create instance with Spotify features
+                    DenseInstance instance = new DenseInstance(dataset.numAttributes());
+                    instance.setValue(attributes.get(0), tempo);
+                    instance.setValue(attributes.get(1), energy);
+                    instance.setValue(attributes.get(2), valence);
+                    instance.setValue(attributes.get(3), acousticness);
+                    instance.setValue(attributes.get(4), instrumentalness);
+
+                    dataset.add(instance);
+
+                    // Classify instance
+                    double labelIndex = moodModel.classifyInstance(dataset.firstInstance());
+                    predictedMood = classValues.get((int) labelIndex);
+
+                    // Get confidence from distribution
+                    double[] distribution = moodModel.distributionForInstance(dataset.firstInstance());
+                    confidence = (float) distribution[(int) labelIndex];
+
+                } catch (Exception e) {
+                    logger.error("Error running Weka model", e);
+                }
+            }
+
 
             // 5. Optionally, fetch recommendations from Spotify
             // Example: using features for seed_tracks or target_* params
