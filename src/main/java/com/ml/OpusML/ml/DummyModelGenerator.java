@@ -35,6 +35,17 @@ public class DummyModelGenerator {
         Instances dataset = new Instances("MoodDataset", attributes, 0);
         dataset.setClassIndex(dataset.numAttributes() - 1);
 
+        //Dummy instances for training purposes
+        double[] vals = new double[dataset.numAttributes()];
+        vals[0] = 120;     //tempo
+        vals[1] = 0.8;     //energy
+        vals[2] = 0.7;     //valence
+        vals[3] = 0.1;     //acousticness
+        vals[4] = 0.0;     //instrumentalness
+        vals[5] = classValues.indexOf("Happy"); //class label
+
+        dataset.add(new DenseInstance(1.0, vals));
+
         //Train a dummy RandomForest classifier on empty dataset
         RandomForest classifier = new RandomForest();
         classifier.buildClassifier(dataset);
