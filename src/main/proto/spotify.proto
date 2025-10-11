@@ -18,23 +18,6 @@ message SearchResponse {
   repeated Track tracks = 1;
 }
 
-message AnalyzeRequest {
-  string track_id = 1;
-}
-
-message RecommendedTrack {
-  string name = 1;
-  string artist = 2;
-  string uri = 3;
-}
-
-message AnalyzeResponse {
-  string predicted_mood = 1;
-  float confidence = 2;
-  repeated RecommendedTrack recommendations = 3;
-}
-
 service OpusMLService {
   rpc SearchTracks(SearchRequest) returns (SearchResponse);
-  rpc AnalyzeTrack(AnalyzeRequest) returns (AnalyzeResponse);
 }
