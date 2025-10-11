@@ -9,8 +9,8 @@ import org.slf4j.LoggerFactory;
 
 public class SpotifyAuth {
     private static final Logger logger = LoggerFactory.getLogger(SpotifyAuth.class);
-    private static final String CLIENT_ID = "2f7a08299ce341aab734c5ae015d1cd4";
-    private static final String CLIENT_SECRET = "ad8455cdddb14da0abf555560aa667bb";
+    private static final String CLIENT_ID = "<CLIENT ID>";
+    private static final String CLIENT_SECRET = "<SECRET KEY>";
     private static final String TOKEN_URL = "https://accounts.spotify.com/api/token";
 
     private static String accessToken = null;
