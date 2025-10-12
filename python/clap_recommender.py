@@ -28,7 +28,7 @@ class ClassicalMusicRecommender:
             host=os.getenv('DB_HOST', 'localhost'),
             database=os.getenv('DB_NAME', 'music_db'),
             user=os.getenv('DB_USER', 'postgres'),
-            password=os.getenv('DB_PASSWORD', 'House493'),
+            password=os.getenv('DB_PASSWORD', '{DBPW}'),
             port=os.getenv('DB_PORT', '5432')
         )
         logger.info("PostgreSQL connection established.")
