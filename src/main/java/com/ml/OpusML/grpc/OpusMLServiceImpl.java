@@ -35,7 +35,9 @@ public class OpusMLServiceImpl extends opusml.OpusMLServiceGrpc.OpusMLServiceImp
 
             if (httpResponse.statusCode() != 200) {
                 logger.error("Spotify API error: status={}, body={}", httpResponse.statusCode(), httpResponse.body());
-                responseObserver.onError(Status.UNAVAILABLE.withDescription("Spotify API returned status: " + httpResponse.statusCode()).asRuntimeException());
+                responseObserver.onError(Status.UNAVAILABLE
+                        .withDescription("Spotify API returned status: " + httpResponse.statusCode())
+                        .asRuntimeException());
                 return;
             }
 
@@ -45,14 +47,28 @@ public class OpusMLServiceImpl extends opusml.OpusMLServiceGrpc.OpusMLServiceImp
 
             for (int i = 0; i < tracksJson.length(); i++) {
                 JSONObject t = tracksJson.getJSONObject(i);
+
+                String trackId = t.optString("id", "");
+                String trackName = t.optString("name", "");
+                String artist = t.getJSONArray("artists").getJSONObject(0).optString("name", "");
+
+                logger.info("🔍 Track: {} by {} | ID: {}", trackName, artist, trackId);
+
                 Spotify.Track tr = Spotify.Track.newBuilder()
-                        .setId(t.optString("id", ""))
-                        .setName(t.optString("name", ""))
-                        .setArtist(t.getJSONArray("artists").getJSONObject(0).optString("name", ""))
+                        .setId(trackId)
+                        .setName(trackName)
+                        .setArtist(artist)
                         .setAlbum(t.getJSONObject("album").optString("name", ""))
                         .setUri(t.optString("uri", ""))
                         .build();
                 respB.addTracks(tr);
+
+                if (!trackId.isEmpty()) {
+                    logger.info("Starting background thread for track: {}", trackId);
+                    new Thread(() -> addTrackToPythonDB(trackId, trackName, artist)).start();
+                } else {
+                    logger.info("Skipping track - missing ID: {}", trackId);
+                }
             }
 
             responseObserver.onNext(respB.build());
@@ -61,6 +77,86 @@ public class OpusMLServiceImpl extends opusml.OpusMLServiceGrpc.OpusMLServiceImp
         } catch (Exception e) {
             logger.error("searchTracks failed", e);
             responseObserver.onError(Status.INTERNAL.withDescription("searchTracks failed").asRuntimeException());
+        }
+    }
+
+    @Override
+    public void getSimilarTracks(Spotify.SimilarTracksRequest request,
+                                 StreamObserver<Spotify.SimilarTracksResponse> responseObserver) {
+        try {
+            String pythonUrl = "http://localhost:8000/recommend";
+            String jsonBody = String.format(
+                    "{\"track_id\": \"%s\", \"top_k\": %d}",
+                    request.getTrackId(), request.getLimit()
+            );
+
+            HttpRequest pythonRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(pythonUrl))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(pythonRequest, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 200) {
+                JSONArray recommendations = new JSONArray(response.body());
+                Spotify.SimilarTracksResponse.Builder responseBuilder = Spotify.SimilarTracksResponse.newBuilder();
+
+                for (int i = 0; i < recommendations.length(); i++) {
+                    JSONObject rec = recommendations.getJSONObject(i);
+                    Spotify.RecommendedTrack track = Spotify.RecommendedTrack.newBuilder()
+                            .setTrackId(rec.getString("track_id"))
+                            .setName(rec.getString("name"))
+                            .setArtist(rec.getString("composer")) // <-- changed here
+                            .setSimilarityScore((float) rec.getDouble("similarity_score"))
+                            .build();
+                    responseBuilder.addTracks(track);
+                }
+
+                responseObserver.onNext(responseBuilder.build());
+                responseObserver.onCompleted();
+            } else {
+                throw new RuntimeException("Python service returned: " + response.statusCode());
+            }
+
+        } catch (Exception e) {
+            logger.error("getSimilarTracks failed", e);
+            responseObserver.onError(Status.INTERNAL
+                    .withDescription("Recommendation failed: " + e.getMessage())
+                    .asRuntimeException());
+        }
+    }
+
+    private void addTrackToPythonDB(String trackId, String name, String composer) {
+        try {
+            if (trackId.isEmpty()) {
+                return;
+            }
+
+            String pythonUrl = "http://localhost:8000/tracks";
+            String jsonBody = String.format(
+                    "{\"track_id\": \"%s\", \"name\": \"%s\", \"composer\": \"%s\"}",
+                    trackId,
+                    name.replace("\"", "\\\""),
+                    composer.replace("\"", "\\\"")
+            );
+
+            HttpRequest pythonRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(pythonUrl))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(pythonRequest, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 201) {
+                logger.info("Added track to Python DB: {} by {}", name, composer);
+            } else {
+                logger.warn("Failed to add track to Python DB: {} - {}", response.statusCode(), response.body());
+            }
+
+        } catch (Exception e) {
+            logger.warn("Failed to add track {} to Python DB: {}", trackId, e.getMessage());
         }
     }
 }
