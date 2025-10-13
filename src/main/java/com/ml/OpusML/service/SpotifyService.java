@@ -1,38 +1,33 @@
 package com.ml.OpusML.service;
 
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
+import opusml.OpusMLServiceGrpc;
 import opusml.Spotify;
 import org.springframework.stereotype.Service;
-import io.grpc.StatusRuntimeException;
 
 @Service
 public class SpotifyService {
 
-    private final opusml.OpusMLServiceGrpc.OpusMLServiceBlockingStub stub;
+    private final OpusMLServiceGrpc.OpusMLServiceBlockingStub stub;
 
-    public SpotifyService(opusml.OpusMLServiceGrpc.OpusMLServiceBlockingStub stub) {
-        this.stub = stub;
+    public SpotifyService() {
+        //Create a gRPC channel to connect to OpusML gRPC server
+        ManagedChannel channel = ManagedChannelBuilder
+                .forAddress("localhost", 9090) //same port as gRPC server
+                .usePlaintext()
+                .build();
+
+        stub = OpusMLServiceGrpc.newBlockingStub(channel);
     }
 
     public Spotify.SearchResponse searchTracks(String query, int limit) {
-        try {
-            Spotify.SearchRequest request = Spotify.SearchRequest.newBuilder()
-                    .setQuery(query)
-                    .setLimit(limit)
-                    .build();
-            return stub.searchTracks(request);
-        } catch (StatusRuntimeException e) {
-            throw new RuntimeException("gRPC searchTracks failed", e);
-        }
+        Spotify.SearchRequest request = Spotify.SearchRequest.newBuilder()
+                .setQuery(query)
+                .setLimit(limit)
+                .build();
+
+        return stub.searchTracks(request);
     }
 
-    public Spotify.AnalyzeResponse analyzeTrack(String trackId) {
-        try {
-            Spotify.AnalyzeRequest request = Spotify.AnalyzeRequest.newBuilder()
-                    .setTrackId(trackId)
-                    .build();
-            return stub.analyzeTrack(request);
-        } catch (StatusRuntimeException e) {
-            throw new RuntimeException("gRPC analyzeTrack failed", e);
-        }
-    }
 }
