@@ -20,4 +20,35 @@ message SearchResponse {
 
 service OpusMLService {
   rpc SearchTracks(SearchRequest) returns (SearchResponse);
+  rpc GetSimilarTracks(SimilarTracksRequest) returns (SimilarTracksResponse);
+}
+
+message SimilarTracksRequest {
+  string track_id = 1;
+  int32 limit = 2;
+}
+
+message RecommendedTrack {
+  string track_id = 1;
+  string name = 2;
+  string artist = 3;
+  float similarity_score = 4;
+}
+
+message SimilarTracksResponse {
+  repeated RecommendedTrack tracks = 1;
+}
+
+message AudioFeaturesRequest {
+  string track_id = 1;
+}
+
+message AudioFeaturesResponse {
+  double tempo = 1;
+  double energy = 2;
+  double valence = 3;
+  double acousticness = 4;
+  double instrumentalness = 5;
+  double danceability = 6;
+  double loudness = 7;
 }
