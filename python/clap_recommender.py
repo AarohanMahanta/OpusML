@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import urllib.parse
 import laion_clap
 from typing import List, Dict, Any, Optional
+from transformers import pipeline
 
 load_dotenv()
 
@@ -24,11 +25,15 @@ class ClassicalMusicRecommender:
         self.model.load_ckpt()
         logger.info("CLAP model loaded.")
 
+        logger.info("Loading AI classifier for genre filtering...")
+        self.genre_classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
+        logger.info("AI classifier loaded.")
+
         self.conn = psycopg2.connect(
             host=os.getenv('DB_HOST', 'localhost'),
             database=os.getenv('DB_NAME', 'music_db'),
             user=os.getenv('DB_USER', 'postgres'),
-            password=os.getenv('DB_PASSWORD', '{DBPW}'),
+            password=os.getenv('DB_PASSWORD', '{PostgresPW}'),
             port=os.getenv('DB_PORT', '5432')
         )
         logger.info("PostgreSQL connection established.")
@@ -117,6 +122,10 @@ class ClassicalMusicRecommender:
                     logger.info(f"Track {track_id} already exists.")
                     return True
 
+            if not self.is_classical_track(name, composer):
+                logger.info(f"Skipping non-classical track: {name} by {composer}")
+                return False
+
             audio_path = self.download_from_internet_archive(composer, name, track_id)
             embedding = self.extract_audio_embedding(audio_path)
 
@@ -182,3 +191,19 @@ class ClassicalMusicRecommender:
         except Exception as e:
             logger.error(f"Recommendation failed: {e}")
             return []
+
+    def is_classical_track(self, title: str, composer: str, description: str = "") -> bool:
+        """
+        Uses a zero-shot classifier to determine if a track is classical music.
+        Returns True if classified as 'classical' with high confidence.
+        """
+        try:
+            text = f"{title} by {composer}. {description}"
+            result = self.genre_classifier(text, candidate_labels=["classical", "non-classical"])
+            label = result["labels"][0]
+            score = result["scores"][0]
+            logger.info(f"AI genre prediction: {label} ({score:.2f}) for {title} by {composer}")
+            return label == "classical" and score > 0.75
+        except Exception as e:
+            logger.error(f"Genre classification failed for {title}: {e}")
+            return False
