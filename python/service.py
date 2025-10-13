@@ -4,6 +4,7 @@ from typing import List
 import logging
 from clap_recommender import ClassicalMusicRecommender
 
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -56,7 +57,7 @@ async def health_check() -> HealthResponse:
 @app.post("/tracks", status_code=201)
 async def add_track(request: AddTrackRequest):
     """
-    Add a track to the database. Automatically downloads real audio from Musopen if possible.
+    Add a track to the database.
     """
     try:
         logger.info(f"Adding track: {request.name} by {request.composer}")
@@ -120,9 +121,7 @@ async def search_tracks(query: str, limit: int = 5):
         logger.error(f"Search failed: {e}")
         raise HTTPException(status_code=500, detail="Database search failed")
 
-# -----------------------------
-# Run with uvicorn
-# -----------------------------
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
