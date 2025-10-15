@@ -5,7 +5,7 @@ import io.grpc.ServerBuilder;
 
 public class OpusMLServer {
     public static void main(String[] args) throws Exception {
-        Server server = ServerBuilder.forPort(50051)
+        Server server = ServerBuilder.forPort(9090)
                 .addService(new OpusMLServiceImpl())
                 .build()
                 .start();
