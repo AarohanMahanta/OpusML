@@ -5,7 +5,13 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -13,11 +19,17 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class SpotifyService {
     private static final Logger logger = LoggerFactory.getLogger(SpotifyService.class);
     private final HttpClient httpClient = HttpClient.newHttpClient();
+
+    private final RestTemplate restTemplate;
+    public SpotifyService() {
+        this.restTemplate = new RestTemplate();
+    }
 
     public SearchResponse searchTracks(String query, int limit) {
         try {
@@ -62,7 +74,44 @@ public class SpotifyService {
         }
     }
 
-    //Internal DTO Response
+
+
+    public RecommendationResponse recommendTracks(String trackId, int topK) {
+        try {
+            String url = UriComponentsBuilder
+                    .fromUriString("http://0.0.0.0:8000/recommend")
+                    .toUriString();
+
+            // Request body for FastAPI POST
+            Map<String, Object> body = Map.of(
+                    "track_id", trackId,
+                    "top_k", topK
+            );
+
+            HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(body);
+
+            ResponseEntity<List<RecommendedTrack>> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.POST,
+                    requestEntity,
+                    new ParameterizedTypeReference<List<RecommendedTrack>>() {}
+            );
+
+            return new RecommendationResponse(response.getBody());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new RecommendationResponse(List.of());
+        }
+    }
+
+
+    //Internal DTO for search response
     public record Track(String id, String name, String artist, String album, String uri) {}
     public record SearchResponse(List<Track> tracks) {}
+
+    //Internal DTO for recommendations
+    public record RecommendedTrack(String track_id, String name, String composer, double similarity_score) {}
+    public record RecommendationResponse(List<RecommendedTrack> recommendations) {}
+
 }
