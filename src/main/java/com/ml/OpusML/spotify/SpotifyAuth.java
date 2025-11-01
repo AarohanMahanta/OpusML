@@ -1,51 +1,46 @@
 package com.ml.OpusML.spotify;
 
-import java.net.URI;
 import java.net.http.*;
+import java.net.URI;
 import java.util.Base64;
 import org.json.JSONObject;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class SpotifyAuth {
-    private static final Logger logger = LoggerFactory.getLogger(SpotifyAuth.class);
-    private static final String CLIENT_ID = "<CLIENT ID>";
-    private static final String CLIENT_SECRET = "<SECRET KEY>";
-    private static final String TOKEN_URL = "https://accounts.spotify.com/api/token";
 
-    private static String accessToken = null;
-    private static long expiresAt = 0;
+    private static String cachedToken = null;
+    private static long expiryTime = 0;
 
-    public static synchronized String getAccessToken() throws Exception {
-        if (accessToken != null && System.currentTimeMillis() < expiresAt - 60000) {
-            return accessToken;
+    public static String getAccessToken() throws Exception {
+        if (cachedToken != null && System.currentTimeMillis() < expiryTime) {
+            return cachedToken;
         }
 
-        String credentials = CLIENT_ID + ":" + CLIENT_SECRET;
-        String encodedCredentials = Base64.getEncoder().encodeToString(credentials.getBytes());
+        String clientId = System.getenv("SPOTIFY_CLIENT_ID");
+        String clientSecret = System.getenv("SPOTIFY_CLIENT_SECRET");
 
-        String body = "grant_type=client_credentials";
+        if (clientId == null || clientSecret == null) {
+            throw new RuntimeException("Missing Spotify client credentials in environment variables!");
+        }
+
+        String auth = Base64.getEncoder().encodeToString((clientId + ":" + clientSecret).getBytes());
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(TOKEN_URL))
-                .header("Authorization", "Basic " + encodedCredentials)
+                .uri(URI.create("https://accounts.spotify.com/api/token"))
+                .header("Authorization", "Basic " + auth)
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .POST(HttpRequest.BodyPublishers.ofString("grant_type=client_credentials"))
                 .build();
 
-        HttpClient client = HttpClient.newHttpClient();
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
 
         if (response.statusCode() != 200) {
-            throw new RuntimeException("Failed to get Spotify token: " + response.statusCode() + " - " + response.body());
+            throw new RuntimeException("Spotify Auth failed: " + response.body());
         }
 
         JSONObject json = new JSONObject(response.body());
-        accessToken = json.getString("access_token");
-        int expiresIn = json.getInt("expires_in");
-        expiresAt = System.currentTimeMillis() + (expiresIn * 1000L);
+        cachedToken = json.getString("access_token");
+        expiryTime = System.currentTimeMillis() + (json.getInt("expires_in") - 30) * 1000;
 
-        logger.info("Got new Spotify token, expires in {} seconds", expiresIn);
-        return accessToken;
+        return cachedToken;
     }
 }

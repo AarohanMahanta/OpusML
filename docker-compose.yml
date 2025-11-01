@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: music_db
+      POSTGRES_USER: username
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d
+    ports:
+      - "5433:5432"
+
+  python-service:
+    build: ./python
+    ports: [ "8000:8000" ]
+    environment:
+      DB_HOST: postgres
+      DB_NAME: music_db
+      DB_USER: username
+      DB_PASSWORD: password
+    depends_on:
+      - postgres
+
+  spring-backend:
+    build: .
+    ports: [ "8080:8080" ]
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/music_db
+      SPRING_DATASOURCE_USERNAME: username
+      SPRING_DATASOURCE_PASSWORD: password
+      SPOTIFY_CLIENT_ID: id
+      SPOTIFY_CLIENT_SECRET: secret
+    depends_on:
+      - python-service
+
+  react-frontend:
+    build:
+      context: ./opusml-frontend
+      args:
+        REACT_APP_API_URL: http://localhost:8080
+    ports:
+      - "3000:80"
+    depends_on:
+      - spring-backend
+
+volumes:
+  postgres_data:

@@ -99,7 +99,7 @@ public class SpotifyService {
 
     private void syncTracksToDatabase(List<Track> tracks) {
         try {
-            String pythonServiceUrl = "http://0.0.0.0:8000/sync-tracks";
+            String pythonServiceUrl = "http://python-service:8000/sync-tracks";
 
             //Convert to request format
             List<Map<String, String>> trackRequests = tracks.stream()
@@ -125,10 +125,10 @@ public class SpotifyService {
     public RecommendationResponse recommendTracks(String trackId, int topK) {
         try {
             String url = UriComponentsBuilder
-                    .fromUriString("http://0.0.0.0:8000/recommend")
+                    .fromUriString("http://python-service:8000/recommend")
                     .toUriString();
 
-            //Request body for FastAPI POST
+            // Request body for FastAPI POST
             Map<String, Object> body = Map.of(
                     "track_id", trackId,
                     "top_k", topK
@@ -143,12 +143,58 @@ public class SpotifyService {
                     new ParameterizedTypeReference<List<RecommendedTrack>>() {}
             );
 
-            return new RecommendationResponse(response.getBody());
+            List<RecommendedTrack> recommendations = response.getBody();
+
+            // Fetch album art for each recommended track from Spotify
+            if (recommendations != null) {
+                List<RecommendedTrack> recommendationsWithArt = recommendations.stream()
+                        .map(rec -> {
+                            String albumArt = fetchAlbumArtForTrack(rec.track_id());
+                            return new RecommendedTrack(
+                                    rec.track_id(),
+                                    rec.name(),
+                                    rec.composer(),
+                                    rec.similarity_score(),
+                                    albumArt  // Add album art
+                            );
+                        })
+                        .collect(Collectors.toList());
+                return new RecommendationResponse(recommendationsWithArt);
+            }
+
+            return new RecommendationResponse(List.of());
 
         } catch (Exception e) {
             e.printStackTrace();
             return new RecommendationResponse(List.of());
         }
+    }
+
+    private String fetchAlbumArtForTrack(String trackId) {
+        try {
+            String accessToken = SpotifyAuth.getAccessToken();
+            String url = String.format("https://api.spotify.com/v1/tracks/%s", trackId);
+
+            HttpRequest httpRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Authorization", "Bearer " + accessToken)
+                    .GET()
+                    .build();
+
+            HttpResponse<String> httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+
+            if (httpResponse.statusCode() == 200) {
+                JSONObject json = new JSONObject(httpResponse.body());
+                JSONObject album = json.getJSONObject("album");
+                JSONArray images = album.optJSONArray("images");
+                if (images != null && images.length() > 0) {
+                    return images.getJSONObject(0).optString("url", "");
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to fetch album art for track {}: {}", trackId, e.getMessage());
+        }
+        return ""; // Return empty string if failed
     }
 
 
@@ -157,7 +203,7 @@ public class SpotifyService {
     public record SearchResponse(List<Track> tracks) {}
 
     //Internal DTO for recommendations
-    public record RecommendedTrack(String track_id, String name, String composer, double similarity_score) {}
+    public record RecommendedTrack(String track_id, String name, String composer, double similarity_score, String albumArt) {}
     public record RecommendationResponse(List<RecommendedTrack> recommendations) {}
 
 }

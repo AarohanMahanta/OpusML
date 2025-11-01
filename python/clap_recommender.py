@@ -32,8 +32,8 @@ class ClassicalMusicRecommender:
         self.conn = psycopg2.connect(
             host=os.getenv('DB_HOST', 'localhost'),
             database=os.getenv('DB_NAME', 'music_db'),
-            user=os.getenv('DB_USER', 'postgres'),
-            password=os.getenv('DB_PASSWORD', '{PW}'),
+            user=os.getenv('DB_USER', 'username'),
+            password=os.getenv('DB_PASSWORD', 'password'),
             port=os.getenv('DB_PORT', '5432')
         )
         logger.info("PostgreSQL connection established.")
@@ -162,7 +162,8 @@ class ClassicalMusicRecommender:
                 if not result:
                     raise ValueError(f"Track {query_track_id} not found.")
 
-                query_embedding = np.array(json.loads(result[0]))
+                # FIXED: Direct conversion without json.loads
+                query_embedding = np.array(result[0], dtype=np.float32)
 
                 cur.execute("""
                     SELECT t.spotify_id, t.name, t.artist, te.embedding_json
@@ -174,7 +175,8 @@ class ClassicalMusicRecommender:
                 recommendations = []
                 for row in cur.fetchall():
                     track_id, name, composer, embedding_json = row
-                    embedding = np.array(json.loads(embedding_json))
+                    # FIXED: Direct conversion without json.loads
+                    embedding = np.array(embedding_json, dtype=np.float32)
                     similarity = float(
                         np.dot(query_embedding, embedding)
                         / (np.linalg.norm(query_embedding) * np.linalg.norm(embedding))
