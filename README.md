@@ -1,4 +1,4 @@
-# [In Progress]OpusML
+# OpusML
 
 ### A Classical Music Recommendation App Powered by Machine Learning
 
